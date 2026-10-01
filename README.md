@@ -78,7 +78,10 @@ grimreaper investigate --profile myprofile      # the agent explains it -> .grim
 grimreaper reap --profile myprofile             # dry run: shows what would be deleted
 grimreaper reap --profile myprofile --execute   # deletes, asking you before each item
 grimreaper watch --profile myprofile            # daily mode: only wakes the agent when something changed
+grimreaper report --redact                      # show the last report again, with account IDs hidden
 ```
+
+Add `--redact` to any command to hide AWS account IDs, which is handy for screenshots.
 
 `scan`, `investigate`, and `watch` only need read access (`ReadOnlyAccess` plus `ce:GetCostAndUsage`).
 Use a separate profile with more permissions for `reap --execute`.

@@ -126,3 +126,16 @@ def test_compare_windows_flags_new_rising_and_stopped(monkeypatch):
     assert status == {"NatGateway-Hours": "new", "WebACL": "rising", "Snapshot": "steady", "Old-LB": "stopped"}
     assert view["usage_types"][0]["usage_type"] == "NatGateway-Hours"
     assert view["recent_usd_per_day"] == pytest.approx(1.5133, abs=1e-3)
+
+
+def test_redact_hides_account_ids_but_not_other_numbers():
+    from grimreaper import cli
+
+    cli.REDACT = True
+    try:
+        text = cli._r("bucket do-not-delete-ssm-818651034041-us-east-1, cost 1234567890123 vs 12.50, arn:aws:iam::818651034041:root")
+    finally:
+        cli.REDACT = False
+    assert "818651034041" not in text
+    assert "1234567890123" in text  # 13 digits: not an account ID
+    assert cli._r("818651034041") == "818651034041"  # off by default

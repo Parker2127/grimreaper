@@ -1,10 +1,11 @@
-"""grimreaper scan | investigate | watch | reap"""
+"""grimreaper scan | investigate | watch | report | reap"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -33,9 +34,18 @@ def _regions(args, session: boto3.Session) -> list[str]:
     return args.regions.split(",") if args.regions else scanners.enabled_regions(session)
 
 
+ACCOUNT_ID = re.compile(r"(?<!\d)\d{12}(?!\d)")
+REDACT = False
+
+
+def _r(text: str) -> str:
+    """Hide 12-digit AWS account IDs when --redact is on (handy for screenshots)."""
+    return ACCOUNT_ID.sub("************", text) if REDACT else text
+
+
 def _whoami(session: boto3.Session) -> None:
     ident = session.client("sts").get_caller_identity()
-    console.print(f"[dim]account {ident['Account']} as {ident['Arn']}[/dim]")
+    console.print(_r(f"[dim]account {ident['Account']} as {ident['Arn']}[/dim]"))
 
 
 # ---------------- scan (no AI) ----------------
@@ -65,7 +75,7 @@ def cmd_scan(args) -> int:
         table.add_column(col, overflow="fold")
     for r in found:
         label = r.name if r.name and r.name != r.id else r.id
-        table.add_row(r.kind, r.region, label, f"{r.monthly_cost:.2f}", r.detail, protection_reason(r) or "")
+        table.add_row(r.kind, r.region, _r(label), f"{r.monthly_cost:.2f}", _r(r.detail), _r(protection_reason(r) or ""))
     console.print(table)
     console.print(f"Estimated total: [bold]${sum(r.monthly_cost for r in found):.2f}/month[/bold] (list prices, rough)")
     for e in errors[:5]:
@@ -168,7 +178,7 @@ def cmd_watch(args) -> int:
 
 def _print_report(report: ReapingReport, inventory: dict[str, Resource]) -> None:
     console.rule("[bold]GrimReaper report")
-    console.print(report.summary)
+    console.print(_r(report.summary))
     console.print(f"\nObserved usage spend, last 30 days: [bold]${report.observed_monthly_spend:.2f}[/bold]\n")
     table = Table()
     for col in ("Action", "Resource", "Region", "Save $/mo", "Why"):
@@ -176,23 +186,37 @@ def _print_report(report: ReapingReport, inventory: dict[str, Resource]) -> None
     for v in report.verdicts:
         r = inventory[v.resource_key]
         table.add_row(
-            f"[{ACTION_STYLE[v.action]}]{v.action}[/]", f"{r.kind} {r.name or r.id}", r.region,
-            f"{v.est_monthly_savings:.2f}", v.reason,
+            f"[{ACTION_STYLE[v.action]}]{v.action}[/]", _r(f"{r.kind} {r.name or r.id}"), r.region,
+            f"{v.est_monthly_savings:.2f}", _r(v.reason),
         )
     console.print(table)
     savings = sum(v.est_monthly_savings for v in report.verdicts if v.action == "delete")
     console.print(f"Reaping everything marked delete saves about [bold]${savings:.2f}/month[/bold].")
 
 
+def _load_report(path: Path) -> tuple[ReapingReport, dict[str, Resource]] | None:
+    if not path.exists():
+        console.print(f"[red]No report at {path}.[/red] Run `grimreaper investigate` first.")
+        return None
+    data = json.loads(path.read_text())
+    return ReapingReport.model_validate(data["report"]), {k: Resource.from_dict(v) for k, v in data["inventory"].items()}
+
+
+def cmd_report(args) -> int:
+    loaded = _load_report(args.report)
+    if loaded is None:
+        return 2
+    _print_report(*loaded)
+    return 0
+
+
 # ---------------- reap (deterministic, human-approved) ----------------
 
 def cmd_reap(args) -> int:
-    if not args.report.exists():
-        console.print(f"[red]No report at {args.report}.[/red] Run `grimreaper investigate` first.")
+    loaded = _load_report(args.report)
+    if loaded is None:
         return 2
-    data = json.loads(args.report.read_text())
-    report = ReapingReport.model_validate(data["report"])
-    inventory = {k: Resource.from_dict(v) for k, v in data["inventory"].items()}
+    report, inventory = loaded
     targets = [(v, inventory[v.resource_key]) for v in report.verdicts if v.action == "delete" and v.resource_key in inventory]
 
     if not targets:
@@ -234,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
     common.add_argument("--profile", help="AWS profile to use")
     common.add_argument("--region", default="us-east-1", help="home region for API calls")
     common.add_argument("--regions", help="comma-separated regions to scan (default: all enabled)")
+    common.add_argument("--redact", action="store_true", help="hide AWS account IDs in the output")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("scan", parents=[common], help="inventory billable resources (no AI, read-only)")
@@ -252,12 +277,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fail-on-findings", action="store_true", help="exit 3 when something needs attention (for CI alerts)")
     p.set_defaults(func=cmd_watch)
 
+    p = sub.add_parser("report", help="show the last saved report again (no AWS or AI calls)")
+    p.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    p.add_argument("--redact", action="store_true", help="hide AWS account IDs in the output")
+    p.set_defaults(func=cmd_report)
+
     p = sub.add_parser("reap", parents=[common], help="delete what the report marked, with per-item approval")
     p.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     p.add_argument("--execute", action="store_true", help="actually delete (default is a dry run)")
     p.set_defaults(func=cmd_reap)
 
     args = parser.parse_args(argv)
+    global REDACT
+    REDACT = args.redact
     try:
         return args.func(args)
     except AgentRunError as e:
