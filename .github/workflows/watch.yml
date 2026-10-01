@@ -1,0 +1,60 @@
+# Always-on GrimReaper: checks your AWS account every morning.
+# Quiet days cost nothing (no AI call). When something new starts billing, the crew investigates,
+# posts to Slack (optional), and the run fails so GitHub emails you.
+#
+# Setup:
+#   1. Create an IAM role GitHub can assume via OIDC, with ReadOnlyAccess + ce:GetCostAndUsage.
+#   2. Repo secrets: AWS_ROLE_ARN, OPENAI_API_KEY, and optionally SLACK_WEBHOOK_URL.
+#   3. Repo variable GRIMREAPER_WATCH=true to switch it on (it's off by default).
+name: watch
+
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  watch:
+    if: vars.GRIMREAPER_WATCH == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Remember what the account looked like last time.
+      - uses: actions/cache/restore@v4
+        with:
+          path: .grimreaper/state.json
+          key: grimreaper-state-${{ github.run_id }}
+          restore-keys: grimreaper-state-
+
+      - run: grimreaper watch --fail-on-findings
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      # Save even when the run "fails" on findings, so tomorrow doesn't re-alert the same thing.
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .grimreaper/state.json
+          key: grimreaper-state-${{ github.run_id }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grimreaper-report
+          path: .grimreaper/report.json
+          if-no-files-found: ignore

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grimreaper"
+version = "0.1.0"
+description = "Find the AWS resources quietly draining your bill, explain them, and reap them with your approval."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "openai>=3.22",  # Agents API (beta)
+    "boto3[crt]>=1.35",  # crt is needed for `aws login` sessions
+    "pydantic>=2.7",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "moto[all]>=5.0"]
+
+[project.scripts]
+grimreaper = "grimreaper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
