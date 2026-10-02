@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GrimReaper logo: a scythe whose blade is a falling cost chart">
+  <rect width="512" height="512" rx="112" fill="#1B1620"/>
+  <!-- handle (snath) and grip -->
+  <line x1="148" y1="440" x2="212" y2="84" stroke="#EDE7DB" stroke-width="24" stroke-linecap="round"/>
+  <line x1="164" y1="334" x2="214" y2="350" stroke="#EDE7DB" stroke-width="18" stroke-linecap="round"/>
+  <!-- blade: smooth outer edge; inner edge is a jagged, falling cost chart -->
+  <path d="M204 70 Q 432 36 452 318 L 412 226 L 384 236 L 352 168 L 318 180 L 282 128 L 246 142 L 208 114 Z"
+        fill="#EDE7DB" stroke="#EDE7DB" stroke-width="6" stroke-linejoin="round"/>
+  <!-- data points on the chart's vertices -->
+  <g fill="#D9822B" stroke="#1B1620" stroke-width="5">
+    <circle cx="246" cy="142" r="11"/>
+    <circle cx="282" cy="128" r="11"/>
+    <circle cx="318" cy="180" r="11"/>
+    <circle cx="352" cy="168" r="11"/>
+    <circle cx="384" cy="236" r="11"/>
+    <circle cx="412" cy="226" r="11"/>
+  </g>
+</svg>

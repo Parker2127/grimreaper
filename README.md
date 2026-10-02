@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo-mark.svg" width="140" alt="GrimReaper logo: a scythe whose blade is a falling cost chart"></p>
+
 # GrimReaper
 
 **Find out what's quietly costing you money on AWS, why, and what's safe to remove.**
